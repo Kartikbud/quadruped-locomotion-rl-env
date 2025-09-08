@@ -40,6 +40,7 @@
   </asset>
 
   <worldbody>
+    <geom name="ground" type="plane" pos="0 0 0" size="5 5 0.01" rgba="0.8 0.8 0.8 1" condim="3" contype="1" conaffinity="1" class="collision"/>
     <body name="base_link" pos="0.00000000 0.00000000 0.14690583" quat="1 0 0 0" childclass="robot">
       <freejoint name="floating_base" />
       <body name="base_inertia" pos="0 0 0" quat="1.0 0.0 0.0 0.0">
