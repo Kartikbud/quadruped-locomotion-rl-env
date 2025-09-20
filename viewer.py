@@ -15,6 +15,10 @@ for i in range(model.ngeom):
 for i in range(model.nv):
     model.dof_damping[i] = 1.0  # adds some resistance to prevent wild movements
 
+# Disable gravity
+#model.opt.gravity[:] = [0, 0, 0]
+
+
 # Launch interactive viewer (this one lets you use control tab)
 with mujoco.viewer.launch(model, data) as viewer:
     # Optional: set background color
