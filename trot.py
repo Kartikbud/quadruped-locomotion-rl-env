@@ -21,6 +21,13 @@ for i in range(model.nv):
 #gait params
 f_stand = [-0.3891, 6.3763, 14.2038] # neutral standing stance (cm)
 
+"""
+stances = {"FL": [-0.3891, 6.3763, 14.2038], 
+           "FR": [-0.3891, -6.3763, 14.2038], 
+           "BL": [-0.3891, 6.3763, 14.2038], 
+           "BR": [-0.3891, -6.3763, 14.2038]}
+"""
+           
 control_freq = 50.0  # Hz (control update frequency)
 control_dt = 1.0 / control_freq
 
@@ -28,7 +35,7 @@ sim_dt = model.opt.timestep # e.g. 0.002 (500 Hz sim)
 steps_per_control = max(1, int(round(control_dt / sim_dt))) #
 
 L_span = 4.0  # step length (cm)
-rho = math.pi/4
+rho = math.pi/2
 gait_period = 0.5  # seconds per full gait cycle (swing + support)
 
 # Trot offsets (normalized 0–1, diagonal pairs)
@@ -59,13 +66,8 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
                     swing = False
                     u = (leg_phase - 0.5) * 2.0     # [0.5,1.0] → [0,1]
 
-                if leg in ["FR", "BR"]: #taking into account the fact the legs are mirrored therefore one side of the quiadrtuped has to have their y coordinates flipped
-                    y_factor = -1
-                else:
-                    y_factor = 1
-
                 #generating the points based on the scaled times from above
-                pt = generate_position_trajectory_point(L_span, rho, 0.0, f_stand, u, swing, y_factor)
+                pt = generate_position_trajectory_point(L_span, rho, 0.0, f_stand, u, swing)
 
                 #using the inverse kinematics to get the angles
                 q = get_joint_angles(pt)
