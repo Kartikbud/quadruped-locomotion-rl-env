@@ -94,7 +94,7 @@
               <geom name="front_left_lower_leg_visual" pos="-0.247 -0.068 0.0535" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="LEFT_LOWER_LEG.stl"  class="visual" />
               <body name="front_left_foot" pos="0 0 -0.1265" quat="1.0 0.0 0.0 0.0">
                 <inertial pos="0 0 0" quat="1.0 0.0 0.0 0.0" mass="0.005" diaginertia="3.5208333333333336e-06 2.8020833333333335e-06 2.8020833333333335e-06" />
-                <geom name="front_left_foot_collision" pos="-0.247 -0.068 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="LEFT_FOOT.stl"  class="collision" friction="8 0.02 0.002" />
+                <geom name="front_left_foot_collision" pos="-0.247 -0.068 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="LEFT_FOOT.stl"  class="collision" friction="15 0.02 0.002" />
                 <geom name="front_left_foot_visual" pos="-0.247 -0.068 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="LEFT_FOOT.stl"  class="visual" />
               </body>
             </body>
@@ -117,7 +117,7 @@
               <geom name="front_right_lower_leg_visual" pos="-0.247 0.138 0.0535" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="RIGHT_LOWER_LEG.stl"  class="visual" />
               <body name="front_right_foot" pos="0 0 -0.1265" quat="1.0 0.0 0.0 0.0">
                 <inertial pos="0 0 0" quat="1.0 0.0 0.0 0.0" mass="0.005" diaginertia="3.5208333333333336e-06 2.8020833333333335e-06 2.8020833333333335e-06" />
-                <geom name="front_right_foot_collision" pos="-0.247 0.138 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="RIGHT_FOOT.stl"  class="collision" friction="8 0.02 0.002" />
+                <geom name="front_right_foot_collision" pos="-0.247 0.138 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="RIGHT_FOOT.stl"  class="collision" friction="15 0.02 0.002" />
                 <geom name="front_right_foot_visual" pos="-0.247 0.138 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="RIGHT_FOOT.stl"  class="visual" />
               </body>
             </body>
@@ -145,7 +145,7 @@
               <geom name="back_left_lower_leg_visual" pos="-0.247 -0.068 0.0535" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="LEFT_LOWER_LEG.stl"  class="visual" />
               <body name="back_left_foot" pos="0 0 -0.1265" quat="1.0 0.0 0.0 0.0">
                 <inertial pos="0 0 0" quat="1.0 0.0 0.0 0.0" mass="0.005" diaginertia="3.5208333333333336e-06 2.8020833333333335e-06 2.8020833333333335e-06" />
-                <geom name="back_left_foot_collision" pos="-0.247 -0.068 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="LEFT_FOOT.stl"  class="collision" friction="8 0.02 0.002" />
+                <geom name="back_left_foot_collision" pos="-0.247 -0.068 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="LEFT_FOOT.stl"  class="collision" friction="15 0.02 0.002" />
                 <geom name="back_left_foot_visual" pos="-0.247 -0.068 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="LEFT_FOOT.stl"  class="visual" />
               </body>
             </body>
@@ -168,7 +168,7 @@
               <geom name="back_right_lower_leg_visual" pos="-0.247 0.138 0.0535" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="RIGHT_LOWER_LEG.stl"  class="visual" />
               <body name="back_right_foot" pos="0 0 -0.1265" quat="1.0 0.0 0.0 0.0">
                 <inertial pos="0 0 0" quat="1.0 0.0 0.0 0.0" mass="0.005" diaginertia="3.5208333333333336e-06 2.8020833333333335e-06 2.8020833333333335e-06" />
-                <geom name="back_right_foot_collision" pos="-0.247 0.138 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="RIGHT_FOOT.stl"  class="collision" friction="8 0.02 0.002" />
+                <geom name="back_right_foot_collision" pos="-0.247 0.138 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" type="mesh" mesh="RIGHT_FOOT.stl"  class="collision" friction="15 0.02 0.002" />
                 <geom name="back_right_foot_visual" pos="-0.247 0.138 0.18" quat="0.7071067811865476 0.0 0.0 0.7071067811865475" material="default_material" type="mesh" mesh="RIGHT_FOOT.stl"  class="visual" />
               </body>
             </body>

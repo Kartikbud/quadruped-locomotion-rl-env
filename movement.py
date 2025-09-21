@@ -28,7 +28,7 @@ for i in range(model.nv):
 # -----------------------------
 f_stand = [-0.3891, 6.3763, 14.2038]   # standing pose (cm)
 
-control_freq = 20.0                         # Hz, gait update frequency
+control_freq = 20.0                         # Hz, gait update frequency (what rate new position targets are set)
 control_dt = 1.0 / control_freq
 
 sim_dt = model.opt.timestep                 # simulation timestep (e.g. 0.002s = 500 Hz)
@@ -69,10 +69,10 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
                 print(f"[{cycle_clock:.2f}s] Walking... gait_t={gait_t:.2f}")
 
                 # Generate desired foot positions
-                FL_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, 0.0)
-                FR_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, -1.0)
-                BL_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, -1.0)
-                BR_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, 0.0)
+                FL_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, 0.0, gait_period)
+                FR_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, -1.0, gait_period)
+                BL_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, -1.0, gait_period)
+                BR_pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, gait_t, 0.0, gait_period)
 
                 # Convert poses from m→cm for IK
                 FL_angles = get_joint_angles(FL_pt)
