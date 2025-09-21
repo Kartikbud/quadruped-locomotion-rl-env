@@ -1,6 +1,7 @@
 import mujoco
 import mujoco.viewer
 import numpy as np
+import math
 
 from inverse_kinematics import get_joint_angles
 from alternate_trajectory import generate_position_trajectory_point  # your (u, swing) API
@@ -17,37 +18,39 @@ for i in range(model.ngeom):
 for i in range(model.nv):
     model.dof_damping[i] = 1.0
 
+#gait params
+f_stand = [-0.3891, 6.3763, 14.2038] # neutral standing stance (cm)
 
-f_stand = [-0.3891, 6.3763, 14.2038]   # neutral stance (cm)
+control_freq = 50.0  # Hz (control update frequency)
+control_dt = 1.0 / control_freq
 
-control_freq = 20.0                      # Hz (control update frequency)
-control_dt   = 1.0 / control_freq
-
-sim_dt = model.opt.timestep              # e.g. 0.002 (500 Hz sim)
+sim_dt = model.opt.timestep # e.g. 0.002 (500 Hz sim)
 steps_per_control = max(1, int(round(control_dt / sim_dt))) #
 
-L_span      = 4.0                        # step length (cm)
-gait_period = 0.5                        # seconds per full gait cycle (swing + support)
+L_span = 4.0  # step length (cm)
+rho = math.pi/4
+gait_period = 0.5  # seconds per full gait cycle (swing + support)
 
 # Trot offsets (normalized 0–1, diagonal pairs)
+# while one pair is in support, the other is in swing
 offsets = {"FL": 0.0, "FR": 0.5, "BL": 0.5, "BR": 0.0}
 
 with mujoco.viewer.launch_passive(model, data) as viewer:
     print("viewer launched")
 
-    step_count   = 0
-    gait_elapsed = 0.0  # advances continuously
+    step_count = 0
+    gait_elapsed = 0.0  # keeping track of the realtime that has elapsed when starting the controller
 
     while viewer.is_running():
-        if step_count % steps_per_control == 0:
-            # 1) Global normalized phase in [0,1]
+        if step_count % steps_per_control == 0: #running the controller at our own frequency rather than 500Hz (mujoco default)
+            #normalizing the global phase to be between [0,1]
             global_phase = (gait_elapsed % gait_period) / gait_period
 
-            joint_targets = []
+            joint_targets = [] #initializing the empty array for the targets for each joint
 
-            # 2) Each leg follows swing/support with offsets
+            #defining the phase offsets for each leg
             for leg in ["FL", "FR", "BL", "BR"]:
-                leg_phase = (global_phase + offsets[leg]) % 1.0
+                leg_phase = (global_phase + offsets[leg]) % 1.0 #offseting the local phase for each leg according to the pairings above
 
                 if leg_phase < 0.5:
                     swing = True
@@ -56,10 +59,15 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
                     swing = False
                     u = (leg_phase - 0.5) * 2.0     # [0.5,1.0] → [0,1]
 
-                # 3) Trajectory point from generator
-                pt = generate_position_trajectory_point(L_span, 0.0, 0.0, f_stand, u, swing)
+                if leg in ["FR", "BR"]: #taking into account the fact the legs are mirrored therefore one side of the quiadrtuped has to have their y coordinates flipped
+                    y_factor = -1
+                else:
+                    y_factor = 1
 
-                # 4) Inverse kinematics to joint angles
+                #generating the points based on the scaled times from above
+                pt = generate_position_trajectory_point(L_span, rho, 0.0, f_stand, u, swing, y_factor)
+
+                #using the inverse kinematics to get the angles
                 q = get_joint_angles(pt)
                 joint_targets.extend(q)
 
