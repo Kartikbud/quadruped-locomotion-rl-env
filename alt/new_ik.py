@@ -23,7 +23,7 @@ def get_joint_angles(pose):
     offset_1 = 1.1369
     u = 10.9868
     l = 14.458
-
+    
     #--gpt offsets--
     # offset_2 = 4.5
     # offset_1 = 0.870
@@ -64,8 +64,7 @@ def get_joint_angles(pose):
     hip = safe_acos((u**2 + h**2 - l**2)/(2*u*h)) - beta
     knee = safe_acos((u**2 + l**2 - h**2)/(2*u*l))
 
-    hip_angle_offset = -1.309
-    knee_angle_offset = (2*math.pi/3)
-
-    return [abduction, hip + hip_angle_offset, (knee - math.pi) + knee_angle_offset]
+    return [abduction, hip, (knee - math.pi)]
     #return [abduction, hip, (knee - math.pi)]
+
+#print(get_joint_angles([-0.3890840259, -6.3763, 13.06694293]))

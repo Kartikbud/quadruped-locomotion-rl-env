@@ -3,7 +3,7 @@ import mujoco.viewer
 import numpy as np
 
 # Load your model
-model = mujoco.MjModel.from_xml_path("models/spot.xml")
+model = mujoco.MjModel.from_xml_path("models/alt_spot.xml")
 data = mujoco.MjData(model)
 
 # Optional: make non-mesh geoms slightly transparent
