@@ -4,19 +4,19 @@ import numpy as np
 import math
 
 from inverse_kinematics import get_joint_angles
-from alternate_trajectory import generate_position_trajectory_point  # your (u, swing) API
+from alternate_trajectory import generate_position_trajectory_point
 
 
-model = mujoco.MjModel.from_xml_path("models/spot.xml")
+model = mujoco.MjModel.from_xml_path("models/spot.xml") #loading the model
 data = mujoco.MjData(model)
 
 # Physics options
-model.opt.gravity[:] = [0, 0, -9.81]
-for i in range(model.ngeom):
+model.opt.gravity[:] = [0, 0, -9.81] #setting the gravity
+for i in range(model.ngeom): #setting the opacity of the collision box geoms to 0.3
     if model.geom_type[i] != mujoco.mjtGeom.mjGEOM_MESH:
         model.geom_rgba[i, 3] = 0.3
 for i in range(model.nv):
-    model.dof_damping[i] = 1.0
+    model.dof_damping[i] = 1.0 #adding damping to the joints to stabilize the movements
 
 #gait params
 f_stand = [-0.38912402, 6.3763, 14.20384174] # neutral standing stance (cm)
@@ -32,12 +32,14 @@ control_freq = 50.0  # Hz (control update frequency)
 control_dt = 1.0 / control_freq
 
 sim_dt = model.opt.timestep # e.g. 0.002 (500 Hz sim)
-steps_per_control = max(1, int(round(control_dt / sim_dt))) #
+steps_per_control = max(1, int(round(control_dt / sim_dt))) #since the mujoco sim frequency is much higher than my desired frequency rate I only run the logic after this many steps in simulation
 
-L_span = 4.0  # step length (cm)
+L_span = 3.5  # step length (cm)
 gait_period = 0.5  # seconds per full gait cycle (swing + support)
-angular_vel = -math.pi/6
-#angular_vel = 0
+angular_vel = 0.0
+rho = -math.pi/2
+clearance = 4
+penetration = 2
 
 length = 22.93
 width = 7.6655
@@ -49,6 +51,8 @@ offsets = {"FL": 0.0, "FR": 0.5, "BL": 0.5, "BR": 0.0}
 site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "base_link_site")
 logfile = open("alt_path.txt", "w")
 
+desired_yaw = 0.0
+
 with mujoco.viewer.launch_passive(model, data) as viewer:
     print("viewer launched")
 
@@ -57,6 +61,20 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
 
     while viewer.is_running():
         if step_count % steps_per_control == 0:
+            #proportional control for the yaw  
+            mat = data.site_xmat[site_id].reshape(3, 3) #getting the rotation matrix orientation of the robot from the IMU
+            yaw = math.atan2(mat[1, 0], mat[0, 0]) #extracting the yaw angle from the quaternion
+
+            yaw_error = desired_yaw - yaw
+            yaw_error = math.atan2(math.sin(yaw_error), math.cos(yaw_error)) #wrapping the error between [-pi, pi]
+            yaw_gain = 3.5
+            yaw_correction = yaw_gain * yaw_error
+            angular_vel = yaw_correction
+
+            #proportional control for the translation
+
+            #angular_vel = 0.0
+            
             global_phase = (gait_elapsed % gait_period) / gait_period
             joint_targets = []
 
@@ -70,7 +88,7 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
                     swing = False
                     u = (leg_phase - 0.5) * 2.0
 
-                pt = generate_position_trajectory_point(L_span, 0.0, angular_vel, f_stand, u, swing, gait_period, length, width, leg)
+                pt = generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, u, swing, gait_period, length, width, leg, clearance, penetration)
 
                 q = get_joint_angles(pt)
                 joint_targets.extend(q)

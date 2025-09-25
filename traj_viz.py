@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load both trajectory datasets
-data_robot = np.loadtxt("robot_path.txt")   # Nx3 [x y z]
+data_robot = np.loadtxt("previous.txt")   # Nx3 [x y z]
 data_alt   = np.loadtxt("alt_path.txt")     # Nx3 [x y z]
 
 x1, y1, z1 = data_robot[:, 0], data_robot[:, 1], data_robot[:, 2]
@@ -14,7 +14,7 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 6))
 axes[0].plot(x1, y1, marker=".", markersize=2, linewidth=1, color="blue")
 axes[0].set_xlabel("X position (m)")
 axes[0].set_ylabel("Y position (m)")
-axes[0].set_title("Robot Path (Top-Down)")
+axes[0].set_title("previous Path (Top-Down)")
 axes[0].axis("equal")
 axes[0].grid(True)
 

@@ -2,7 +2,7 @@ import math
 import numpy as np
 
 ###add phase paramater which essentially signifies an offset to apply, either 0 or -1 to the time variable and then modify if statements at bottom so no change is sent if < 0 or > 2
-def generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, time, swing, dt, length, width, leg): #rho is translation angle
+def generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, time, swing, dt, length, width, leg, clearance, penetration): #rho is translation angle
 
     quadratic_bezier_matrix = np.array([
         [1, 0, 0],
@@ -10,8 +10,8 @@ def generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, time, 
         [1, -2, 1]
     ])
 
-    curve_param = 4
-    support_curve_param = 2
+    curve_param = clearance
+    support_curve_param = penetration
 
     swing_points = np.array([
         [0, 0], 
@@ -29,10 +29,10 @@ def generate_position_trajectory_point(L_span, rho, angular_vel, f_stand, time, 
     w = width
 
     initial_stances = {
-        "FL": [l/2, -w/2],
-        "FR": [l/2, w/2],
-        "BL": [-l/2, -w/2],
-        "BR": [-l/2, w/2]
+        "FL": [l/2, w/2],
+        "FR": [l/2, -w/2],
+        "BL": [-l/2, w/2],
+        "BR": [-l/2, -w/2]
     }
 
     theta = dt * angular_vel
