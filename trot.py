@@ -35,9 +35,9 @@ sim_dt = model.opt.timestep # e.g. 0.002 (500 Hz sim)
 steps_per_control = max(1, int(round(control_dt / sim_dt))) #since the mujoco sim frequency is much higher than my desired frequency rate I only run the logic after this many steps in simulation
 
 L_span = 3.5  # step length (cm)
-gait_period = 0.5  # seconds per full gait cycle (swing + support)
+gait_period = 0.4  # seconds per full gait cycle (swing + support)
 angular_vel = 0.0
-rho = -math.pi/2
+rho = 0.0
 clearance = 4
 penetration = 2
 
