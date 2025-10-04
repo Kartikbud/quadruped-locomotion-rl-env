@@ -58,11 +58,15 @@ class QuadEnv(gym.Env):
 
         self.frequency = 50
         self.control_dt = 1/self.frequency
+
+        self.x_pos = self.robot_data.qpos[0] #keeping track of the forward position of the robot
         
     def step(self, action):
         
         mat = self.robot_data.site_xmat[self.site_id].reshape(3, 3) #getting the rotation matrix orientation of the robot from the IMU
         yaw = math.atan2(mat[1, 0], mat[0, 0]) #extracting the yaw angle from the quaternion
+        roll  = math.atan2(mat[2,1], mat[2,2])
+        pitch = math.atan2(-mat[2,0], math.sqrt(mat[2,1]**2 + mat[2,2]**2))
 
         yaw_error = self.angular_vel - yaw
         yaw_error = math.atan2(math.sin(yaw_error), math.cos(yaw_error)) #wrapping the error between [-pi, pi]
@@ -102,6 +106,61 @@ class QuadEnv(gym.Env):
 
         for i in range(int((500/self.frequency)) - 1):
             mujoco.mj_step(self.robot_model, self.robot_data)
+
+        observations = self.get_obs()
+        reward = self.get_reward()
+        
+        terminated = (
+            abs(roll) > np.deg2rad(60) or
+            abs(pitch) > np.deg2rad(60) or
+            self.robot_data.qpos[2] < 0.05  # base hit ground (tune threshold)
+        )
+
+        truncated = self.step_count >= self.max_steps
+        info = {}
+
+        return observations, reward, terminated, truncated, info
+
+    def get_reward(self):
+        rotation_matrix = self.robot_data.site_xmat[self.site_id].reshape(3, 3) #getting the rotation matrix orientation of the robot from the IMU
+
+        #isolating the euler angles of the robot
+        roll  = math.atan2(rotation_matrix[2,1], rotation_matrix[2,2])
+        pitch = math.atan2(-rotation_matrix[2,0], math.sqrt(rotation_matrix[2,1]**2 + rotation_matrix[2,2]**2))
+
+        new_x = self.robot_data.qpos[0]
+        dx = new_x - self.x_pos
+
+        self.x_pos = new_x
+
+        reward = dx - (10 * (abs(pitch) + abs(roll))) - (0.03 * np.sum(np.abs(self.robot_data.qvel[3:6])))
+
+        return reward
+    
+    def get_obs(self):
+        rotation_matrix = self.robot_data.site_xmat[self.site_id].reshape(3, 3) #getting the rotation matrix orientation of the robot from the IMU
+
+        #isolating the euler angles of the robot
+        roll  = math.atan2(rotation_matrix[2,1], rotation_matrix[2,2])
+        pitch = math.atan2(-rotation_matrix[2,0], math.sqrt(rotation_matrix[2,1]**2 + rotation_matrix[2,2]**2))
+        yaw   = math.atan2(rotation_matrix[1,0], rotation_matrix[0,0])
+
+        #
+        lin_acc = self.robot_data.qacc[:3].copy()  # [ax, ay, az]
+
+        global_phase = (self.gait_elapsed % self.gait_period) / self.gait_period
+        phases = np.array([
+            (global_phase + self.phase_offsets[leg]) % 1.0
+            for leg in ["FL", "FR", "BL", "BR"]
+            ], dtype=np.float32)
+        
+        obs = np.concatenate([[roll, pitch, yaw], lin_acc, phases])
+
+        return obs.astype(np.float32)
+
+
+
+
 
 #-----------------------HELPER FUNCTIONS--------------------------
 
