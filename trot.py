@@ -10,6 +10,14 @@ from alternate_trajectory import generate_position_trajectory_point
 model = mujoco.MjModel.from_xml_path("models/spot.xml") #loading the model
 data = mujoco.MjData(model)
 
+# ---- Make terrain flat ----
+if model.nhfield > 0:
+    nrows = model.hfield_nrow[0]
+    ncols = model.hfield_ncol[0]
+    flat_height = np.zeros(nrows * ncols)
+    model.hfield_data[:nrows * ncols] = flat_height
+
+
 # Physics options
 model.opt.gravity[:] = [0, 0, -9.81] #setting the gravity
 for i in range(model.ngeom): #setting the opacity of the collision box geoms to 0.3

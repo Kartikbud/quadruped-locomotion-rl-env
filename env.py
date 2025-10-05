@@ -21,7 +21,7 @@ from alternate_trajectory import generate_position_trajectory_point
 """
 
 class QuadEnv(gym.Env):
-    metadata = {'render.modes': ["human", "rgb_array"],
+    metadata = {'render_modes': ["human", "rgb_array"],
                 'render_fps': 50}
     
     def __init__(self):
@@ -48,8 +48,8 @@ class QuadEnv(gym.Env):
         self.gait_period = 0.4 #how many seconds the swing + support phases is
         self.angular_vel = 0.0 #keeping the angular translation and yaw rotation at 0 for training
         self.rho = 0.0
-        self.clearance_limits = [0, 4] #the range of the clearance parameter
-        self.penetration_limits = [0, 2] #the range of the penetration parameter
+        self.clearance_limits = [0, 7] #the range of the clearance parameter
+        self.penetration_limits = [0, 4] #the range of the penetration parameter
         self.robot_length = 22.93 #length and width of the robot from hip to hip based on official docs
         self.robot_width = 7.6655
         self.phase_offsets = {"FL": 0.0, "FR": 0.5, "BL": 0.5, "BR": 0.0} #defining the phase offsets for each leg
@@ -60,6 +60,20 @@ class QuadEnv(gym.Env):
         self.control_dt = 1/self.frequency
 
         self.x_pos = self.robot_data.qpos[0] #keeping track of the forward position of the robot
+
+        self.max_steps = 2000
+        self.step_count = 0
+
+        self.viewer = None
+
+        self.default_body_mass = self.robot_model.body_mass.copy()
+        self.default_friction = self.robot_model.geom_friction.copy()
+        if self.robot_model.nhfield > 0:
+            self.default_hfield = self.robot_model.hfield_data.copy()
+        else:
+            self.default_hfield = None
+        
+        self._hfield_dirty = False
         
     def step(self, action):
         
@@ -103,6 +117,7 @@ class QuadEnv(gym.Env):
         self.gait_elapsed += self.control_dt
 
         mujoco.mj_step(self.robot_model, self.robot_data)
+        self.step_count += 1
 
         for i in range(int((500/self.frequency)) - 1):
             mujoco.mj_step(self.robot_model, self.robot_data)
@@ -157,7 +172,99 @@ class QuadEnv(gym.Env):
         obs = np.concatenate([[roll, pitch, yaw], lin_acc, phases])
 
         return obs.astype(np.float32)
+    
+    def reset(self, seed=None, options=None):
 
+        if self.viewer is not None:
+            try:
+                self.viewer.close()
+            except Exception:
+                pass
+            self.viewer = None
+
+        super().reset(seed=seed)
+
+        self.np_random, _ = gym.utils.seeding.np_random(seed)
+
+        for i in range(self.robot_model.nbody): #randomizing the mass of each body part to introduce randomization of the robot dynamics
+            scale = self.np_random.uniform(0.8, 1.2)
+            self.robot_model.body_mass[i] *= scale
+        
+        for i in range(self.robot_model.ngeom):
+            geom_name = mujoco.mj_id2name(self.robot_model, mujoco.mjtObj.mjOBJ_GEOM, i)
+
+            if "foot" in geom_name:
+                # Keep high traction but small variation
+                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(60.0, 60.0)
+                self.robot_model.geom_friction[i, 1] = self.default_friction[i, 1]  # keep torsional same
+                self.robot_model.geom_friction[i, 2] = self.default_friction[i, 2]  # keep rolling same
+
+            elif "ground" in geom_name:
+                # Slightly vary ground friction
+                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(18, 22)
+
+            else:
+                # Lightly randomize body collision friction
+                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(8, 12)
+
+
+        if self.robot_model.nhfield > 0: #randomizing the height field of the ground to add some terrain/domain randomization for higher robustness
+            nrows = int(self.robot_model.hfield_nrow[0])
+            ncols = int(self.robot_model.hfield_ncol[0])
+            size = nrows * ncols
+
+            # Start from a baseline. If the XML hfield is flat, default may be all zeros.
+            base = self.default_hfield[:size].copy()
+            if float(base.max()) == float(base.min()):
+                # Flat baseline → pick 0.5 so noise is symmetric and stays in [0,1]
+                base[:] = 0.5
+
+            # Add fresh noise and clip to [0, 1]
+            noise = self.np_random.uniform(-0.08, 0.08, size=size)  # try 0.2 for obvious visuals
+            new_h = np.clip(base + noise, 0.0, 1.0)
+            self.robot_model.hfield_data[:size] = new_h
+
+            # Mark for viewer re-upload
+            self._hfield_dirty = True
+            #mujoco.mj_uploadHField(self.robot_model, 0)
+
+
+        mujoco.mj_resetData(self.robot_model, self.robot_data) #resetting the world and robot model
+        self.gait_elapsed = 0.0 #resetting gait elapsed counter
+        self.x_pos = self.robot_data.qpos[0] #resetting the position after the robot goes back to starting position
+        self.step_count = 0  # reset step counter
+        obs = self.get_obs() #returning the new initial set of observations
+        return obs, {}
+    
+    def render(self, mode="human"):
+        if mode == "human":
+            if self.viewer is None:
+                # Open exactly once; never relaunch here
+                try:
+                    self.viewer = mujoco.viewer.launch_passive(self.robot_model, self.robot_data)
+                except RuntimeError as e:
+                    # If UI thread hasn’t fully closed yet, just skip this frame
+                    if "another MuJoCo viewer is already open" in str(e):
+                        return
+                    raise
+
+            try:
+                self.viewer.sync()
+            except Exception as e:
+                print(f"Viewer sync error: {e}")
+                try:
+                    self.viewer.close()
+                except Exception:
+                    pass
+                self.viewer = None
+
+
+
+    
+    def close(self):
+        if self.viewer is not None:
+            self.viewer.close()
+            self.viewer = None
 
 
 
