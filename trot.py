@@ -10,12 +10,36 @@ from alternate_trajectory import generate_position_trajectory_point
 model = mujoco.MjModel.from_xml_path("models/spot.xml") #loading the model
 data = mujoco.MjData(model)
 
-# ---- Make terrain flat ----
-if model.nhfield > 0:
-    nrows = model.hfield_nrow[0]
-    ncols = model.hfield_ncol[0]
-    flat_height = np.zeros(nrows * ncols)
-    model.hfield_data[:nrows * ncols] = flat_height
+
+
+# ----COMMENTING OUT THE HEIGHT FIELD RANDOMIZATION, THIS FILE IS MAINLY FOR TESTING THE CONTROLLER ON FLAT TERRAIN------
+
+# if model.nhfield > 0: #taking the field height and applying it to the simulation
+#     nrows = int(model.hfield_nrow[0])
+#     ncols = int(model.hfield_ncol[0])
+#     size = nrows * ncols
+#
+#     base = model.hfield_data[:size].copy().reshape(nrows, ncols)
+#     sz = float(model.hfield_size[0, 2])
+#     if sz <= 0.0:
+#         sz = 1.0
+#
+#     terrain_m = base * sz
+#
+#     axis_range = 0.08  # 8 cm variation per-axis
+#     x_profile = np.random.uniform(0.0, axis_range, size=(1, ncols))
+#     y_profile = np.random.uniform(0.0, axis_range, size=(nrows, 1))
+#     z_noise = np.random.uniform(0.0, axis_range, size=(nrows, ncols))
+#
+#     terrain_m += x_profile
+#     terrain_m += y_profile
+#     terrain_m += z_noise
+#
+#     terrain_m = np.clip(terrain_m, 0.0, axis_range)
+#     new_h = np.clip(terrain_m / sz, 0.0, 1.0)
+#     model.hfield_data[:size] = new_h.ravel()
+#
+#     mujoco.mj_forward(model, data)    # recompute geom placements
 
 
 # Physics options
@@ -107,12 +131,12 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         # Always step physics
         mujoco.mj_step(model, data)
 
-        # ✨ Log robot base position
+        #Loging robot base position for trajectory visualization
         base_pos = data.site_xpos[site_id].copy()
         logfile.write(f"{base_pos[0]} {base_pos[1]} {base_pos[2]}\n")
 
         viewer.sync()
         step_count += 1
 
-# ✨ Close logfile after viewer exits
+# Close logfile after viewer exits
 logfile.close()

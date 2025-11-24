@@ -23,7 +23,7 @@ def main():
     for i in range(steps):
         # Random action from the action space
         #action = env.action_space.sample()
-        action = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]
+        action = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.6, 0.5]
         obs, reward, terminated, truncated, info = env.step(action)
 
         # Print progress occasionally

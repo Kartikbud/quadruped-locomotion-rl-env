@@ -1,34 +1,23 @@
 import gymnasium as gym
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.callbacks import CheckpointCallback
 from env import QuadEnv
 
 def main():
-    # ✅ Create a headless environment (no rendering)
-    env = DummyVecEnv([lambda: QuadEnv()])
+    num_envs = 4
+    def make_env():
+        return QuadEnv()
+    env = SubprocVecEnv([lambda: make_env() for _ in range(num_envs)])
 
-    # ✅ Create an evaluation environment (optional)
-    eval_env = DummyVecEnv([lambda: QuadEnv()])
-
-    # ✅ Checkpoint callback (saves every N steps)
+    # saving a model every 50k steps as a checkpoint
     checkpoint_callback = CheckpointCallback(
         save_freq=50_000,  # save every 50k steps
         save_path="./checkpoints/",
         name_prefix="ppo_quad_checkpoint"
     )
 
-    # ✅ Evaluation callback (tests model performance periodically)
-    eval_callback = EvalCallback(
-        eval_env,
-        best_model_save_path="./best_model/",
-        log_path="./logs/",
-        eval_freq=25_000,
-        deterministic=True,
-        render=False
-    )
-
-    # ✅ Initialize PPO model
+    # intiialize model from SB3
     model = PPO(
         "MlpPolicy",
         env,
@@ -44,19 +33,17 @@ def main():
         device="auto"
     )
 
-    # ✅ Train without rendering
-    total_timesteps = 2_500_000  # increase to 2M+ for serious training
+    # training without rendering
+    total_timesteps = 7_500_000  # increase to 2M+ for serious training
     model.learn(
         total_timesteps=total_timesteps,
-        callback=[checkpoint_callback, eval_callback]
+        callback=[checkpoint_callback]
     )
 
-    # ✅ Save final model
+    # Saving the final model
     model.save("ppo_quad_spot")
-    print("✅ Training complete — model saved to ppo_quad_spot.zip")
 
     env.close()
-    eval_env.close()
 
 if __name__ == "__main__":
     main()

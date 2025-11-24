@@ -36,6 +36,7 @@ class QuadEnv(gym.Env):
         self.site_id = mujoco.mj_name2id(self.robot_model, mujoco.mjtObj.mjOBJ_SITE, "base_link_site")
 
         self.robot_model.opt.gravity[:] = [0, 0, -9.81] #setting the gravity
+        self.robot_model.body("base_link").pos[:] = [0.0, 0.0, 0.15]
         for i in range(self.robot_model.ngeom): #setting the opacity of the collision box geoms to 0.3
             if self.robot_model.geom_type[i] != mujoco.mjtGeom.mjGEOM_MESH:
                 self.robot_model.geom_rgba[i, 3] = 0.3
@@ -66,6 +67,7 @@ class QuadEnv(gym.Env):
 
         self.viewer = None
 
+        #making a copy of the default values of frictions and masses so that during the reset phase where dynamics and the domain is randomized it is done with respect to the original values
         self.default_body_mass = self.robot_model.body_mass.copy()
         self.default_friction = self.robot_model.geom_friction.copy()
         if self.robot_model.nhfield > 0:
@@ -74,6 +76,9 @@ class QuadEnv(gym.Env):
             self.default_hfield = None
         
         self._hfield_dirty = False
+
+        self.ref_height = self.robot_data.qpos[2].copy()  # baseline standing height
+
         
     def step(self, action):
         
@@ -144,11 +149,22 @@ class QuadEnv(gym.Env):
         pitch = math.atan2(-rotation_matrix[2,0], math.sqrt(rotation_matrix[2,1]**2 + rotation_matrix[2,2]**2))
 
         new_x = self.robot_data.qpos[0]
-        dx = new_x - self.x_pos
+        
+        forward_reward_gain = 20
+        dx = forward_reward_gain * (new_x - self.x_pos)
 
         self.x_pos = new_x
 
         reward = dx - (10 * (abs(pitch) + abs(roll))) - (0.03 * np.sum(np.abs(self.robot_data.qvel[3:6])))
+
+        current_height = self.robot_data.qpos[2]
+        height_deviation = abs(current_height - self.ref_height)
+
+        # Strong penalty if it jumps more than 0.5 m above reference
+        # if current_height > (self.ref_height + 0.5):
+        #     reward -= 50.0 * (current_height - (self.ref_height + 0.5))
+        # else:
+        #     reward -= 1.0 * height_deviation
 
         return reward
     
@@ -186,6 +202,10 @@ class QuadEnv(gym.Env):
 
         self.np_random, _ = gym.utils.seeding.np_random(seed)
 
+        # Restore defaults before applying randomization so values don't drift across resets
+        self.robot_model.body_mass[:] = self.default_body_mass
+        self.robot_model.geom_friction[:] = self.default_friction
+
         for i in range(self.robot_model.nbody): #randomizing the mass of each body part to introduce randomization of the robot dynamics
             scale = self.np_random.uniform(0.8, 1.2)
             self.robot_model.body_mass[i] *= scale
@@ -194,18 +214,18 @@ class QuadEnv(gym.Env):
             geom_name = mujoco.mj_id2name(self.robot_model, mujoco.mjtObj.mjOBJ_GEOM, i)
 
             if "foot" in geom_name:
-                # Keep high traction but small variation
-                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(60.0, 60.0)
+                # Test with higher traction
+                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(2.0, 2.5)
                 self.robot_model.geom_friction[i, 1] = self.default_friction[i, 1]  # keep torsional same
                 self.robot_model.geom_friction[i, 2] = self.default_friction[i, 2]  # keep rolling same
 
             elif "ground" in geom_name:
-                # Slightly vary ground friction
-                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(18, 22)
+                # Raise ground friction to test traction limits
+                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(1.5, 1.9)
 
             else:
-                # Lightly randomize body collision friction
-                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(8, 12)
+                # Keep body friction modest as before
+                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(0.5, 0.7)
 
 
         if self.robot_model.nhfield > 0: #randomizing the height field of the ground to add some terrain/domain randomization for higher robustness
@@ -213,16 +233,23 @@ class QuadEnv(gym.Env):
             ncols = int(self.robot_model.hfield_ncol[0])
             size = nrows * ncols
 
-            # Start from a baseline. If the XML hfield is flat, default may be all zeros.
-            base = self.default_hfield[:size].copy()
-            if float(base.max()) == float(base.min()):
-                # Flat baseline → pick 0.5 so noise is symmetric and stays in [0,1]
-                base[:] = 0.5
+            base = self.default_hfield[:size].copy().reshape(nrows, ncols)
+            sz = float(self.robot_model.hfield_size[0, 2])
+            if sz <= 0.0:
+                sz = 1.0  # fallback to avoid divide-by-zero
 
-            # Add fresh noise and clip to [0, 1]
-            noise = self.np_random.uniform(-0.08, 0.08, size=size)  # try 0.2 for obvious visuals
-            new_h = np.clip(base + noise, 0.0, 1.0)
-            self.robot_model.hfield_data[:size] = new_h
+            # Convert baseline heights to meters before adding directional noise
+            terrain_m = base * sz
+
+            axis_range = 0.04  # 4 cm variation per-axis
+            noise = self.np_random.uniform(-axis_range, axis_range, size=(nrows, ncols))
+
+            terrain_m += noise
+            terrain_m = np.clip(terrain_m, -axis_range, axis_range)
+
+            # Shift back into [0, 1] for MuJoCo after scaling by sz
+            normalized = np.clip((terrain_m / sz) + 0.5, 0.0, 1.0)
+            self.robot_model.hfield_data[:size] = normalized.ravel()
 
             # Mark for viewer re-upload
             self._hfield_dirty = True
@@ -230,6 +257,8 @@ class QuadEnv(gym.Env):
 
 
         mujoco.mj_resetData(self.robot_model, self.robot_data) #resetting the world and robot model
+        self.robot_data.qpos[2] = 0.15
+        self.robot_data.qvel[:] = 0
         self.gait_elapsed = 0.0 #resetting gait elapsed counter
         self.x_pos = self.robot_data.qpos[0] #resetting the position after the robot goes back to starting position
         self.step_count = 0  # reset step counter
@@ -257,8 +286,6 @@ class QuadEnv(gym.Env):
                 except Exception:
                     pass
                 self.viewer = None
-
-
 
     
     def close(self):
