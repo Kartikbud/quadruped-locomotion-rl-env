@@ -19,10 +19,6 @@ While the original work used PyBullet environments, this project recreates the c
 
 ### Environment Requirements
 - Python **3.10** (recommended via `venv` or Conda)
-- MuJoCo + `mujoco` Python bindings
-- Gymnasium
-- Stable-Baselines3
-- All dependencies listed in `requirements.txt`
 
 ### Install Dependencies
 ```bash
