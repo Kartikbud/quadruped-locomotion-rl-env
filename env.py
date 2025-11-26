@@ -9,7 +9,7 @@ import numpy as np
 import math
 
 from inverse_kinematics import get_joint_angles
-from alternate_trajectory import generate_position_trajectory_point
+from bezier_trajectory_generator import generate_position_trajectory_point
 
 #during training only forward motion is used with fixed L_span of 3.5cm and yaw is controlled with proportional controller that maintains a forward heading
 
@@ -36,7 +36,7 @@ class QuadEnv(gym.Env):
         self.site_id = mujoco.mj_name2id(self.robot_model, mujoco.mjtObj.mjOBJ_SITE, "base_link_site")
 
         self.robot_model.opt.gravity[:] = [0, 0, -9.81] #setting the gravity
-        self.robot_model.body("base_link").pos[:] = [0.0, 0.0, 0.15]
+        self.robot_model.body("base_link").pos[:] = [0.0, 0.0, 0.40]
         for i in range(self.robot_model.ngeom): #setting the opacity of the collision box geoms to 0.3
             if self.robot_model.geom_type[i] != mujoco.mjtGeom.mjGEOM_MESH:
                 self.robot_model.geom_rgba[i, 3] = 0.3
@@ -54,6 +54,9 @@ class QuadEnv(gym.Env):
         self.robot_length = 22.93 #length and width of the robot from hip to hip based on official docs
         self.robot_width = 7.6655
         self.phase_offsets = {"FL": 0.0, "FR": 0.5, "BL": 0.5, "BR": 0.0} #defining the phase offsets for each leg
+        self.residual_scale = 0.01  # meters per unit action (~1 cm max deviation)
+        self.desired_speed = 0.25  # m/s target forward velocity, just to better shape the reward signal so that forward movement is prioritized
+        self.desired_yaw_rate = 0.0
 
         self.gait_elapsed = 0.0 #keeping track of the gait phase during each trotting sequence
 
@@ -62,10 +65,13 @@ class QuadEnv(gym.Env):
 
         self.x_pos = self.robot_data.qpos[0] #keeping track of the forward position of the robot
 
-        self.max_steps = 2000
+        self.max_steps = 1000 #40s cap on training episodes (might be high)
         self.step_count = 0
 
         self.viewer = None
+        self.warmup_steps = 20 #defining a set amount of steps to delay training at the beginning of the episode as the robot drops onto the scene because the messy reward signals ruin training
+        self.steps_since_reset = 0
+        self._needs_randomization = True #initializing this boolean to true so that training starts with a randomized dynamics and domain sampling
 
         #making a copy of the default values of frictions and masses so that during the reset phase where dynamics and the domain is randomized it is done with respect to the original values
         self.default_body_mass = self.robot_model.body_mass.copy()
@@ -78,8 +84,15 @@ class QuadEnv(gym.Env):
         self._hfield_dirty = False
 
         self.ref_height = self.robot_data.qpos[2].copy()  # baseline standing height
+        try:
+            self.base_body_id = mujoco.mj_name2id(self.robot_model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
+        except ValueError:
+            self.base_body_id = None
+        self.leg_body_keywords = ("hip", "upper_leg", "lower_leg", "foot")
 
-        
+    def resample_randomization(self): #callback function to resample domain and dynamics
+        self._needs_randomization = True
+
     def step(self, action):
         
         mat = self.robot_data.site_xmat[self.site_id].reshape(3, 3) #getting the rotation matrix orientation of the robot from the IMU
@@ -96,10 +109,22 @@ class QuadEnv(gym.Env):
         global_phase = (self.gait_elapsed % self.gait_period) / self.gait_period
         joint_targets = []
 
-        clearance = normalize(action[12], [self.action_space.low[12], self.action_space.high[12]], self.clearance_limits)
-        penetration = normalize(action[13], [self.action_space.low[13], self.action_space.high[13]], self.penetration_limits)
+        if self.steps_since_reset < self.warmup_steps:
+            effective_action = np.zeros_like(action)
+            warmup_active = True
+        else:
+            effective_action = np.asarray(action, dtype=np.float32)
+            warmup_active = False
 
-        corrections = {"FL": action[0:3], "FR": action[3:6], "BL": action[6:9], "BR": action[9:12]}
+        clearance = normalize(effective_action[12], [self.action_space.low[12], self.action_space.high[12]], self.clearance_limits)
+        penetration = normalize(effective_action[13], [self.action_space.low[13], self.action_space.high[13]], self.penetration_limits)
+
+        corrections = {
+            "FL": effective_action[0:3] * self.residual_scale,
+            "FR": effective_action[3:6] * self.residual_scale,
+            "BL": effective_action[6:9] * self.residual_scale,
+            "BR": effective_action[9:12] * self.residual_scale
+        }
 
         for leg in ["FL", "FR", "BL", "BR"]:
             leg_phase = (global_phase + self.phase_offsets[leg]) % 1.0
@@ -123,6 +148,7 @@ class QuadEnv(gym.Env):
 
         mujoco.mj_step(self.robot_model, self.robot_data)
         self.step_count += 1
+        self.steps_since_reset += 1
 
         for i in range(int((500/self.frequency)) - 1):
             mujoco.mj_step(self.robot_model, self.robot_data)
@@ -137,34 +163,50 @@ class QuadEnv(gym.Env):
         )
 
         truncated = self.step_count >= self.max_steps
-        info = {}
+        info = {"warmup_active": warmup_active}
 
         return observations, reward, terminated, truncated, info
 
     def get_reward(self):
-        rotation_matrix = self.robot_data.site_xmat[self.site_id].reshape(3, 3) #getting the rotation matrix orientation of the robot from the IMU
-
-        #isolating the euler angles of the robot
+        
+        #isolating the pitch and roll of the robot
+        rotation_matrix = self.robot_data.site_xmat[self.site_id].reshape(3, 3)
         roll  = math.atan2(rotation_matrix[2,1], rotation_matrix[2,2])
         pitch = math.atan2(-rotation_matrix[2,0], math.sqrt(rotation_matrix[2,1]**2 + rotation_matrix[2,2]**2))
 
-        new_x = self.robot_data.qpos[0]
-        
-        forward_reward_gain = 20
-        dx = forward_reward_gain * (new_x - self.x_pos)
 
-        self.x_pos = new_x
+        base_lin_vel_world = self.robot_data.qvel[:3].copy() #getting the velocity of the robot relative to the global frame
+        base_ang_vel = self.robot_data.qvel[3:6].copy() #getting the angular velocities of the robot
+        base_lin_vel_body = rotation_matrix.T @ base_lin_vel_world #projecting the linear velocities to the body frame of the robot
 
-        reward = dx - (10 * (abs(pitch) + abs(roll))) - (0.03 * np.sum(np.abs(self.robot_data.qvel[3:6])))
+        forward_speed = base_lin_vel_body[0]
+        lateral_speed = base_lin_vel_body[1]
 
-        current_height = self.robot_data.qpos[2]
-        height_deviation = abs(current_height - self.ref_height)
+        speed_error = forward_speed - self.desired_speed
+        forward_reward = math.exp(-(speed_error ** 2) / 0.1)
 
-        # Strong penalty if it jumps more than 0.5 m above reference
-        # if current_height > (self.ref_height + 0.5):
-        #     reward -= 50.0 * (current_height - (self.ref_height + 0.5))
-        # else:
-        #     reward -= 1.0 * height_deviation
+        yaw_rate = base_ang_vel[2]
+        yaw_error = yaw_rate - self.desired_yaw_rate
+        yaw_reward = -abs(yaw_error)
+
+        lateral_penalty = -abs(lateral_speed)
+        posture_penalty = -(abs(roll) + abs(pitch))
+        shake_penalty = -abs(self.robot_data.qacc[2])
+
+        backward_penalty = 0.0
+        if forward_speed < 0:
+            backward_penalty = -2.0 * abs(forward_speed)
+
+        reward = (
+            forward_reward
+            + 0.2 * yaw_reward
+            + 0.2 * lateral_penalty
+            + 0.5 * posture_penalty
+            + 0.1 * shake_penalty
+            + backward_penalty
+        )
+
+        self.x_pos = self.robot_data.qpos[0] #updating the current x position
 
         return reward
     
@@ -172,11 +214,11 @@ class QuadEnv(gym.Env):
         rotation_matrix = self.robot_data.site_xmat[self.site_id].reshape(3, 3) #getting the rotation matrix orientation of the robot from the IMU
 
         #isolating the euler angles of the robot
-        roll  = math.atan2(rotation_matrix[2,1], rotation_matrix[2,2])
+        roll = math.atan2(rotation_matrix[2,1], rotation_matrix[2,2])
         pitch = math.atan2(-rotation_matrix[2,0], math.sqrt(rotation_matrix[2,1]**2 + rotation_matrix[2,2]**2))
-        yaw   = math.atan2(rotation_matrix[1,0], rotation_matrix[0,0])
+        yaw = math.atan2(rotation_matrix[1,0], rotation_matrix[0,0])
 
-        #
+        #linear acclerations
         lin_acc = self.robot_data.qacc[:3].copy()  # [ax, ay, az]
 
         global_phase = (self.gait_elapsed % self.gait_period) / self.gait_period
@@ -202,66 +244,78 @@ class QuadEnv(gym.Env):
 
         self.np_random, _ = gym.utils.seeding.np_random(seed)
 
-        # Restore defaults before applying randomization so values don't drift across resets
-        self.robot_model.body_mass[:] = self.default_body_mass
-        self.robot_model.geom_friction[:] = self.default_friction
+        if self._needs_randomization:
+            #need to first reset masses and frictions to their defaults so that the resampling doesnt cause the values to start drifting away
+            self.robot_model.body_mass[:] = self.default_body_mass
+            self.robot_model.geom_friction[:] = self.default_friction
 
-        for i in range(self.robot_model.nbody): #randomizing the mass of each body part to introduce randomization of the robot dynamics
-            scale = self.np_random.uniform(0.8, 1.2)
-            self.robot_model.body_mass[i] *= scale
-        
-        for i in range(self.robot_model.ngeom):
-            geom_name = mujoco.mj_id2name(self.robot_model, mujoco.mjtObj.mjOBJ_GEOM, i)
+            def gaussian_scale(std_fraction=0.2): #using a gaussian distribution to resample the dynamics and domain around the original values
+                scale = self.np_random.normal(1.0, std_fraction / 2.0)
+                return float(np.clip(scale, 1.0 - std_fraction, 1.0 + std_fraction))
 
-            if "foot" in geom_name:
-                # Test with higher traction
-                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(2.0, 2.5)
-                self.robot_model.geom_friction[i, 1] = self.default_friction[i, 1]  # keep torsional same
-                self.robot_model.geom_friction[i, 2] = self.default_friction[i, 2]  # keep rolling same
+            if self.base_body_id is not None: #scaling the mass of the base of the body based on the gaussian distribution
+                base_scale = gaussian_scale(0.2)
+                self.robot_model.body_mass[self.base_body_id] = (
+                    self.default_body_mass[self.base_body_id] * base_scale
+                )
 
-            elif "ground" in geom_name:
-                # Raise ground friction to test traction limits
-                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(1.5, 1.9)
+            for i in range(self.robot_model.nbody): #scaling each mass of the body
+                if i == self.base_body_id:
+                    continue
+                body_name = mujoco.mj_id2name(self.robot_model, mujoco.mjtObj.mjOBJ_BODY, i)
+                if body_name is None:
+                    continue
+                if any(keyword in body_name for keyword in self.leg_body_keywords): #scaling the legs seperately as they are generally a unique assembly compared to the main body
+                    leg_scale = gaussian_scale(0.2)
+                    self.robot_model.body_mass[i] = self.default_body_mass[i] * leg_scale
 
-            else:
-                # Keep body friction modest as before
-                self.robot_model.geom_friction[i, 0] = self.np_random.uniform(0.5, 0.7)
+            for i in range(self.robot_model.ngeom): #scaling the traction of the feet based on a distribution centered around 1.15
+                geom_name = mujoco.mj_id2name(self.robot_model, mujoco.mjtObj.mjOBJ_GEOM, i)
+
+                if geom_name and "foot" in geom_name:
+                    # Foot friction randomized per paper spec
+                    self.robot_model.geom_friction[i, 0] = self.np_random.uniform(0.8, 1.5)
+                    self.robot_model.geom_friction[i, 1] = self.default_friction[i, 1]
+                    self.robot_model.geom_friction[i, 2] = self.default_friction[i, 2]
 
 
-        if self.robot_model.nhfield > 0: #randomizing the height field of the ground to add some terrain/domain randomization for higher robustness
-            nrows = int(self.robot_model.hfield_nrow[0])
-            ncols = int(self.robot_model.hfield_ncol[0])
-            size = nrows * ncols
+            if self.robot_model.nhfield > 0: #randomizing the height field of the ground to add some terrain/domain randomization for higher robustness
+                nrows = int(self.robot_model.hfield_nrow[0])
+                ncols = int(self.robot_model.hfield_ncol[0])
+                size = nrows * ncols
 
-            base = self.default_hfield[:size].copy().reshape(nrows, ncols)
-            sz = float(self.robot_model.hfield_size[0, 2])
-            if sz <= 0.0:
-                sz = 1.0  # fallback to avoid divide-by-zero
+                base = self.default_hfield[:size].copy().reshape(nrows, ncols)
+                sz = float(self.robot_model.hfield_size[0, 2])
+                if sz <= 0.0:
+                    sz = 1.0  # fallback to avoid divide-by-zero
 
-            # Convert baseline heights to meters before adding directional noise
-            terrain_m = base * sz
+                # Convert baseline heights to meters before adding directional noise
+                terrain_m = base * sz
 
-            axis_range = 0.04  # 4 cm variation per-axis
-            noise = self.np_random.uniform(-axis_range, axis_range, size=(nrows, ncols))
+                axis_range = self.np_random.uniform(0.0, 0.08)  # up to 8 cm variation
+                noise = self.np_random.uniform(-axis_range, axis_range, size=(nrows, ncols))
 
-            terrain_m += noise
-            terrain_m = np.clip(terrain_m, -axis_range, axis_range)
+                terrain_m += noise
+                terrain_m = np.clip(terrain_m, -axis_range, axis_range)
 
-            # Shift back into [0, 1] for MuJoCo after scaling by sz
-            normalized = np.clip((terrain_m / sz) + 0.5, 0.0, 1.0)
-            self.robot_model.hfield_data[:size] = normalized.ravel()
+                # Shift back into [0, 1] for MuJoCo after scaling by sz
+                normalized = np.clip((terrain_m / sz) + 0.5, 0.0, 1.0)
+                self.robot_model.hfield_data[:size] = normalized.ravel()
 
-            # Mark for viewer re-upload
-            self._hfield_dirty = True
-            #mujoco.mj_uploadHField(self.robot_model, 0)
+                # Mark for viewer re-upload
+                self._hfield_dirty = True
+                #mujoco.mj_uploadHField(self.robot_model, 0)
+
+            self._needs_randomization = False
 
 
         mujoco.mj_resetData(self.robot_model, self.robot_data) #resetting the world and robot model
-        self.robot_data.qpos[2] = 0.15
+        self.robot_data.qpos[2] = 0.40
         self.robot_data.qvel[:] = 0
         self.gait_elapsed = 0.0 #resetting gait elapsed counter
         self.x_pos = self.robot_data.qpos[0] #resetting the position after the robot goes back to starting position
         self.step_count = 0  # reset step counter
+        self.steps_since_reset = 0
         obs = self.get_obs() #returning the new initial set of observations
         return obs, {}
     

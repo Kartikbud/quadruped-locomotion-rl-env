@@ -4,43 +4,11 @@ import numpy as np
 import math
 
 from inverse_kinematics import get_joint_angles
-from alternate_trajectory import generate_position_trajectory_point
+from bezier_trajectory_generator import generate_position_trajectory_point
 
 
 model = mujoco.MjModel.from_xml_path("models/spot.xml") #loading the model
 data = mujoco.MjData(model)
-
-
-
-# ----COMMENTING OUT THE HEIGHT FIELD RANDOMIZATION, THIS FILE IS MAINLY FOR TESTING THE CONTROLLER ON FLAT TERRAIN------
-
-# if model.nhfield > 0: #taking the field height and applying it to the simulation
-#     nrows = int(model.hfield_nrow[0])
-#     ncols = int(model.hfield_ncol[0])
-#     size = nrows * ncols
-#
-#     base = model.hfield_data[:size].copy().reshape(nrows, ncols)
-#     sz = float(model.hfield_size[0, 2])
-#     if sz <= 0.0:
-#         sz = 1.0
-#
-#     terrain_m = base * sz
-#
-#     axis_range = 0.08  # 8 cm variation per-axis
-#     x_profile = np.random.uniform(0.0, axis_range, size=(1, ncols))
-#     y_profile = np.random.uniform(0.0, axis_range, size=(nrows, 1))
-#     z_noise = np.random.uniform(0.0, axis_range, size=(nrows, ncols))
-#
-#     terrain_m += x_profile
-#     terrain_m += y_profile
-#     terrain_m += z_noise
-#
-#     terrain_m = np.clip(terrain_m, 0.0, axis_range)
-#     new_h = np.clip(terrain_m / sz, 0.0, 1.0)
-#     model.hfield_data[:size] = new_h.ravel()
-#
-#     mujoco.mj_forward(model, data)    # recompute geom placements
-
 
 # Physics options
 model.opt.gravity[:] = [0, 0, -9.81] #setting the gravity
@@ -68,9 +36,9 @@ steps_per_control = max(1, int(round(control_dt / sim_dt))) #since the mujoco si
 
 L_span = 3.5  # step length (cm)
 gait_period = 0.4  # seconds per full gait cycle (swing + support)
-angular_vel = 0.0
-rho = 0.0
-clearance = 4
+angular_vel = 0.0 # yaw rate
+rho = 0.0 # translational angle
+clearance = 4 # gait parameters
 penetration = 2
 
 length = 22.93
@@ -102,8 +70,6 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
             yaw_gain = 3.5
             yaw_correction = yaw_gain * yaw_error
             angular_vel = yaw_correction
-
-            #proportional control for the translation
 
             #angular_vel = 0.0
             
