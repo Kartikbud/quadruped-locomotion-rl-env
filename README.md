@@ -47,13 +47,13 @@ mjpython <script_name>.py
 *(Placeholders — replace with your embedded videos or GIFs)*
 
 ### 1. Baseline Controller — Flat Terrain
-_[Insert video/GIF here]_
+![Baseline Controller GIF](assets/baseline_trot.gif)
 
 ### 2. Baseline Controller — Randomized Terrain (No Policy)
-_[Insert video/GIF here]_
+![No Policy GIF](assets/no_policy.gif)
 
 ### 3. Trained Policy Modulating the Controller — Randomized Terrain
-_[Insert video/GIF here]_
+![Policy GIF](assets/with_policy.gif)
 
 ## 🧩 Project Motivation & Design
 
