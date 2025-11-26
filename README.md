@@ -3,8 +3,9 @@
 ### Overview
 This repository contains a reinforcement learning environment and controller framework designed for training a quadruped robot to walk robustly over varied terrains using **MuJoCo** and **Gymnasium**.
 
-The project is inspired by the domain–randomized locomotion training pipeline from:  
-**"Learning to Walk in Minutes Using Massively Parallel Deep Reinforcement Learning"**  
+The project is inspired by the dynamics and domain–randomized locomotion training pipeline from:  
+**"Dynamics and Domain Randomized Gait Modulation with Bezier Curves for Sim-to-Real Legged Locomotion"
+**  
 (Peng et al., 2020) — https://arxiv.org/abs/2010.12070
 
 While the original work used PyBullet environments, this project recreates the core concepts in **MuJoCo**, including:
@@ -28,3 +29,9 @@ While the original work used PyBullet environments, this project recreates the c
 ### Install Dependencies
 ```bash
 pip install -r requirements.txt
+```
+
+### Install Dependencies
+```bash
+mjpython <script_name>.py
+```
