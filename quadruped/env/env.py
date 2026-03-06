@@ -2,14 +2,15 @@ import gymnasium as gym
 from gymnasium import spaces
 import stable_baselines3 as SB3
 import numpy as np
+from pathlib import Path
 
 import mujoco
 import mujoco.viewer
 import numpy as np
 import math
 
-from inverse_kinematics import get_joint_angles
-from bezier_trajectory_generator import generate_position_trajectory_point
+from quadruped.motion.inverse_kinematics import get_joint_angles
+from quadruped.motion.bezier_trajectory_generator import generate_position_trajectory_point
 
 #during training only forward motion is used with fixed L_span of 3.5cm and yaw is controlled with proportional controller that maintains a forward heading
 
@@ -31,7 +32,8 @@ class QuadEnv(gym.Env):
         self.action_space = spaces.Box(low=-1, high=1, shape=(14,), dtype=np.float32)
 
         #initializing the mujoco model and settings
-        self.robot_model = mujoco.MjModel.from_xml_path("models/spot.xml")
+        model_xml = Path(__file__).resolve().parents[2] / "robot" / "spot.xml"
+        self.robot_model = mujoco.MjModel.from_xml_path(str(model_xml))
         self.robot_data = mujoco.MjData(self.robot_model)
         self.site_id = mujoco.mj_name2id(self.robot_model, mujoco.mjtObj.mjOBJ_SITE, "base_link_site")
 

@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from env import QuadEnv   # ← replace with your actual filename
+from quadruped.env.env import QuadEnv   # ← replace with your actual filename
 
 def main():
     # Create environment

@@ -1,6 +1,6 @@
 import time
 from stable_baselines3 import PPO
-from env import QuadEnv
+from quadruped.env.env import QuadEnv
 
 def main():
     env = QuadEnv()
