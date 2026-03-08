@@ -4,6 +4,7 @@ from pathlib import Path
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, LogEveryNTimesteps
 from stable_baselines3.common.vec_env import SubprocVecEnv
+import torch as th
 
 from quadruped.env import QuadEnv
 from quadruped.training.callbacks import RandomizationCallback
@@ -52,6 +53,10 @@ def main():
     model = PPO(
         "MlpPolicy",
         env,
+        policy_kwargs=dict(
+            activation_fn=th.nn.ReLU,
+            net_arch=dict(pi=[64], vf=[64]),
+        ),
         verbose=1,
         n_steps=2048,
         batch_size=64,
@@ -73,6 +78,7 @@ def main():
         save_path=str(checkpoint_dir),
         name_prefix=model_stem,
     )
+    
     model.learn(
         total_timesteps=args.training_time,
         callback=[rand_callback, log_callback, checkpoint_callback],
