@@ -7,7 +7,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 import torch as th
 
 from quadruped.env import QuadEnv
-from quadruped.training.callbacks import RandomizationCallback
+from quadruped.training.callbacks import RandomizationCallback, RewardLoggingCallback
 
 
 def parse_args():
@@ -55,7 +55,7 @@ def main():
         env,
         policy_kwargs=dict(
             activation_fn=th.nn.ReLU,
-            net_arch=dict(pi=[64], vf=[64]),
+            net_arch=dict(pi=[64, 64], vf=[64, 64]),
         ),
         verbose=1,
         n_steps=2048,
@@ -72,6 +72,7 @@ def main():
     rollout_size = model.n_steps * args.num_envs
     log_every_n_steps = max(64_000, rollout_size)
     rand_callback = RandomizationCallback()
+    reward_log_callback = RewardLoggingCallback(window_size=100)
     log_callback = LogEveryNTimesteps(n_steps=log_every_n_steps)
     checkpoint_callback = CheckpointCallback(
         save_freq=50_000,
@@ -81,7 +82,7 @@ def main():
     
     model.learn(
         total_timesteps=args.training_time,
-        callback=[rand_callback, log_callback, checkpoint_callback],
+        callback=[rand_callback, reward_log_callback, log_callback, checkpoint_callback],
         log_interval=None,
     )
 

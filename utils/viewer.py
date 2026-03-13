@@ -1,10 +1,13 @@
+from pathlib import Path
+
 import mujoco
 import mujoco.viewer
 import numpy as np
-from pathlib import Path
+
 
 def main():
-    model_xml = Path(__file__).resolve().parent / "robot" / "alt_spot.xml"
+    repo_root = Path(__file__).resolve().parents[1]
+    model_xml = repo_root / "robot" / "alt_spot.xml"
     model = mujoco.MjModel.from_xml_path(str(model_xml))
     data = mujoco.MjData(model)
 

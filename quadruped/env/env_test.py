@@ -1,6 +1,15 @@
+import sys
 import time
+from pathlib import Path
+
 import numpy as np
-from quadruped.env.env import QuadEnv   # ← replace with your actual filename
+
+# Allow running this file directly from quadruped/env with `mjpython env_test.py`.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from quadruped.env.env import QuadEnv
 
 def main():
     # Create environment
